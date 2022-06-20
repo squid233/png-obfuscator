@@ -6,21 +6,37 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Base64;
+import java.util.zip.GZIPOutputStream;
 
 public final class Obfuscator {
     public static void main(String[] args) throws IOException {
         if (args.length < 2) {
-            System.out.println("Usage: <input-file> <output-img>");
+            System.out.println("Usage: <input-file> <output-img> [pre-compress=false]");
             return;
         }
+
         byte[] arr;
-        try (var os = new ByteArrayOutputStream()) {
+        boolean preGZ = args.length >= 3 && Boolean.parseBoolean(args[2]);
+        try (var bos = new ByteArrayOutputStream();
+             var gos = preGZ ? new GZIPOutputStream(bos) : null) {
             var img = ImageIO.read(new File(args[0]));
-            ImageIO.write(img, "png", os);
-            arr = os.toByteArray();
+            ImageIO.write(img, "png", preGZ ? gos : bos);
+            if (preGZ) {
+                gos.finish();
+            }
+            arr = bos.toByteArray();
         } catch (Exception e) {
-            arr = Files.readAllBytes(Path.of(args[0]));
+            try (var bos = preGZ ? new ByteArrayOutputStream() : null;
+                 var gos = preGZ ? new GZIPOutputStream(bos) : null) {
+                arr = Files.readAllBytes(Path.of(args[0]));
+                if (preGZ) {
+                    gos.write(arr);
+                    gos.finish();
+                    arr = bos.toByteArray();
+                }
+            }
         }
+
         var b64 = Base64.getEncoder().encodeToString(arr);
         int len = b64.length();
         int height = (int) Math.ceil(Math.sqrt(len));

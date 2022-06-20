@@ -6,11 +6,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.Base64;
+import java.util.zip.GZIPInputStream;
 
 public final class Deobfuscator {
     public static void main(String[] args) throws IOException {
         if (args.length < 2) {
-            System.out.println("Usage: <input-img> <output-file> [image=true]");
+            System.out.println("Usage: <input-img> <output-file> [image=true] [pre-compressed=false]");
             return;
         }
         var finb64 = new StringBuilder();
@@ -26,13 +27,22 @@ public final class Deobfuscator {
         }
         byte[] arr = Base64.getDecoder().decode(finb64.toString());
         boolean isOutputImg = args.length < 3 || Boolean.parseBoolean(args[2]);
+        boolean preGZ = args.length >= 4 && Boolean.parseBoolean(args[3]);
         if (isOutputImg) {
-            try (var is = new ByteArrayInputStream(arr)) {
-                var out = ImageIO.read(is);
+            try (var bis = new ByteArrayInputStream(arr);
+                 var gis = preGZ ? new GZIPInputStream(bis) : null
+            ) {
+                var out = ImageIO.read(preGZ ? gis : bis);
                 ImageIO.write(out, "png", new File(args[1]));
             }
         } else {
-            Files.write(Path.of(args[1]), arr, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            try (var bis = preGZ ? new ByteArrayInputStream(arr) : null;
+                 var gis = preGZ ? new GZIPInputStream(bis) : null) {
+                if (preGZ) {
+                    arr = gis.readAllBytes();
+                }
+                Files.write(Path.of(args[1]), arr, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+            }
         }
     }
 }
